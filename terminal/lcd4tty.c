@@ -4,6 +4,7 @@
 #include <wiringPi.h>
 #include <wiringPiI2C.h>
 #include <stdint.h>
+#include "basic_tree.h"
 
 // I2C 주소 및 LCD 명령 정의
 #define I2C_ADDR 0x27
@@ -45,8 +46,8 @@ int main()
     // 무한 루프: 시간 표시 갱신
     while (1)
     {
-        display_time(); // 시간 표시 함수 호출
-        delay(1000);    // 1초마다 갱신
+        display_time("hi"); // 시간 표시 함수 호출
+        delay(1000);        // 1초마다 갱신
     }
 
     return 0;
