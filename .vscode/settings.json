@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "softpwm.h": "c"
+    },
+    "github.copilot.chat.localeOverride": "ko",
+    "github.copilot.chat.scopeSelection": true
+}
