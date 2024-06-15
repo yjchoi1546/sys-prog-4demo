@@ -26,15 +26,16 @@
 int fd;
 int textIndex = 0;
 char *texts[] = {
-    "Please tag your\ncell phone",
-    "Hello, master.",
-    "Mileage deduction",
-    "User list",
-    "Mileage deduction\n-User list",
-    "User list\n-Add admin account",
-    "ID: 1018671476064\nMileage: 263",
-    "ID: 1039200060321\nMileage: 87",
-    "No more user!"};
+    "Please tag your\ncell phone",     // rfid
+    "Hello, master.",                  // 우
+    "-Mileage deduce\nUser list",      // 하
+    "Mileage deduce\n-User list",      // 하
+    "User list\n-Add admin account",   // 상
+    "-User list\nAdd admin account",   // 우
+    "ID: 1018671476064\nMileage: 263", // 하
+    "ID: 1039200060321\nMileage: 87",  // 하
+    "No more user!",                   // 좌
+    "-User list\nAdd admin account"};
 
 // 함수 선언
 void lcd_init();
@@ -95,6 +96,12 @@ void display_text()
 {
     // 현재 텍스트 가져오기
     char *text = texts[textIndex];
+
+    // 첫 번째 줄과 두 번째 줄을 지우기
+    lcd_byte(LINE1, LCD_CMD);
+    lcd_send_string("                "); // 16칸 공백으로 지우기
+    lcd_byte(LINE2, LCD_CMD);
+    lcd_send_string("                "); // 16칸 공백으로 지우기
 
     // 첫 번째 줄 출력
     char line1[17] = {0};
