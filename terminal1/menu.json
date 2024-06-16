@@ -1,0 +1,72 @@
+{
+    "name": "Please tag your phone",
+    "subItems": [
+        {
+            "name": "Administrator",
+            "subItems": [
+                {
+                    "name": "Use Mileage",
+                    "subItems": [
+                        {
+                            "name": "Please tag the smartphone you want to use the mileage with"
+                        },
+                        {
+                            "name": "Adjust the mileage to be deducted"
+                        }
+                    ]
+                },
+                {
+                    "name": "User List",
+                    "subItems": [
+                        {
+                            "name": "ID, Mileage",
+                            "subItems": [
+                                {
+                                    "name": "Actual usage records"
+                                },
+                                {
+                                    "name": "Delete user"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Manage Administrator Accounts",
+                    "subItems": [
+                        {
+                            "name": "Add new administrator account",
+                            "subItems": [
+                                {
+                                    "name": "Please tag the smartphone for the account"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Delete administrator account",
+                            "subItems": [
+                                {
+                                    "name": "Please tag the smartphone for the account"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "General",
+            "subItems": [
+                {
+                    "name": "Row 1: ID, Mileage"
+                },
+                {
+                    "name": "Row 2: Usage records"
+                },
+                {
+                    "name": "Row 3: Start time - End time - Mileage earned"
+                }
+            ]
+        }
+    ]
+}

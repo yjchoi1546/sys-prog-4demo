@@ -1,0 +1,1 @@
+/usr/bin/cc CMakeFiles/rfid_menu.dir/main.c.o CMakeFiles/rfid_menu.dir/menu.c.o CMakeFiles/rfid_menu.dir/lcd.c.o CMakeFiles/rfid_menu.dir/input.c.o -o rfid_menu  -lcjson -lpthread 
