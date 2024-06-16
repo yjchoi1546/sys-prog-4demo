@@ -12,12 +12,6 @@
 #define SERVER_IP "127.0.0.1"
 #define SERVER_PORT 8080
 
-#define BUTTON_PIN_1 13
-#define BUTTON_PIN_2 19
-#define BUTTON_PIN_3 26
-#define BUTTON_PIN_4 16
-volatile int buttonStates[4] = {0, 0, 0, 0};
-
 #define I2C_ADDR 0x27
 
 #define LCD_CHR 1 // 모드 - 데이터
@@ -29,6 +23,9 @@ volatile int buttonStates[4] = {0, 0, 0, 0};
 #define LCD_BACKLIGHT 0x08 // 백라이트 ON
 #define ENABLE 0b00000100  // Enable 비트
 
+#define BUTTON_COUNT 4
+int buttonPins[BUTTON_COUNT] = {13, 19, 26, 16}; // BUTTON_PIN_1, BUTTON_PIN_2, BUTTON_PIN_3, BUTTON_PIN_4
+
 typedef struct TreeNode
 {
     char *name;
@@ -38,10 +35,12 @@ typedef struct TreeNode
     int subItemCount;           // 자식 노드 개수
 } TreeNode;
 
-pthread_mutex_t lock;
+int lcd_fd = -1;
 TreeNode *currentNode = NULL;
 int currentIndex = 0;
-int lcd_fd = -1;
+pthread_mutex_t lock;
+pthread_cond_t cond;
+int buttonEvent = 0;
 
 int lcd_init();
 void lcd_byte(int lcd_fd, int bits, int mode);
@@ -66,6 +65,8 @@ TreeNode *parse_json(cJSON *json);
 void print_tree(TreeNode *node, int level);
 void free_tree(TreeNode *node);
 TreeNode *read_json(const char *filename);
+void *display_thread(void *arg);
+void lcd_clear(int lcd_fd);
 
 int main(int argc, char *argv[])
 {
@@ -76,49 +77,45 @@ int main(int argc, char *argv[])
     }
 
     pthread_mutex_init(&lock, NULL);
+    pthread_cond_init(&cond, NULL);
 
-    resetGPIO(BUTTON_PIN_1);
-    resetGPIO(BUTTON_PIN_2);
-    resetGPIO(BUTTON_PIN_3);
-    resetGPIO(BUTTON_PIN_4);
+    for (int i = 0; i < BUTTON_COUNT; i++)
+    {
+        exportGPIO(buttonPins[i]);
+        setGPIODirection(buttonPins[i], "high");
+    }
 
-    setGPIODirection(BUTTON_PIN_1, "high");
-    setGPIODirection(BUTTON_PIN_2, "high");
-    setGPIODirection(BUTTON_PIN_3, "high");
-    setGPIODirection(BUTTON_PIN_4, "high");
+    pthread_t displayThread;
+    pthread_t buttonThreads[BUTTON_COUNT];
 
-    pthread_t server;
-    pthread_t thread1, thread2, thread3, thread4, monitor;
-    int pin1 = BUTTON_PIN_1;
-    int pin2 = BUTTON_PIN_2;
-    int pin3 = BUTTON_PIN_3;
-    int pin4 = BUTTON_PIN_4;
+    for (int i = 0; i < BUTTON_COUNT; i++)
+    {
+        pthread_create(&buttonThreads[i], NULL, buttonThread, &buttonPins[i]);
+    }
 
-    pthread_create(&thread1, NULL, buttonThread, &pin1);
-    pthread_create(&thread2, NULL, buttonThread, &pin2);
-    pthread_create(&thread3, NULL, buttonThread, &pin3);
-    pthread_create(&thread4, NULL, buttonThread, &pin4);
-    pthread_create(&monitor, NULL, monitorThread, NULL);
-    pthread_create(&server, NULL, socket_thread, NULL);
+    pthread_create(&displayThread, NULL, display_thread, NULL);
 
     const char *filename = "menu.json";
     TreeNode *root = read_json(filename);
-    if (root == NULL)
+
+    // 초기 메뉴 설정
+    currentNode = root;
+    currentIndex = 0;
+    display_menu(lcd_fd, currentNode, currentIndex);
+
+    for (int i = 0; i < BUTTON_COUNT; i++)
     {
-        printf("메뉴를 읽을 수 없습니다\n");
-        return 1;
+        pthread_join(buttonThreads[i], NULL);
     }
 
-    pthread_join(thread1, NULL);
-    pthread_join(thread2, NULL);
-    pthread_join(thread3, NULL);
-    pthread_join(thread4, NULL);
-    pthread_join(monitor, NULL);
-    pthread_join(server, NULL);
+    pthread_join(displayThread, NULL);
 
     pthread_mutex_destroy(&lock);
+    pthread_cond_destroy(&cond);
 
     close(lcd_fd);
+
+    free_tree(root);
 
     return 0;
 }
@@ -133,12 +130,7 @@ void exportGPIO(int pin)
         perror("Failed to open export for writing");
         exit(1);
     }
-    if (write(fd, buffer, len) < 0)
-    {
-        perror("Failed to export pin");
-        close(fd);
-        exit(1);
-    }
+    write(fd, buffer, len);
     close(fd);
 }
 
@@ -154,6 +146,7 @@ void unexportGPIO(int pin)
     }
     if (write(fd, buffer, len) < 0)
     {
+        printf("bcm: %d\n", pin);
         perror("Failed to unexport pin");
         close(fd);
         exit(1);
@@ -213,13 +206,13 @@ void *buttonThread(void *arg)
     int previousState = 1;
     int button;
 
-    if (pin == BUTTON_PIN_1)
+    if (pin == buttonPins[0])
         button = 1; // 위 버튼
-    else if (pin == BUTTON_PIN_2)
+    else if (pin == buttonPins[1])
         button = 2; // 왼쪽 버튼
-    else if (pin == BUTTON_PIN_3)
+    else if (pin == buttonPins[2])
         button = 3; // 아래 버튼
-    else
+    else if (pin == buttonPins[3])
         button = 4; // 오른쪽 버튼
 
     while (1)
@@ -231,58 +224,6 @@ void *buttonThread(void *arg)
         }
         previousState = buttonState;
         usleep(50000); // 0.05초 대기
-    }
-    return NULL;
-}
-void handle_button_event(int lcd_fd, int button)
-{
-    pthread_mutex_lock(&lock);
-
-    if (button == 1) // 위 버튼
-    {
-        currentIndex = (currentIndex - 1 + currentNode->subItemCount) % currentNode->subItemCount;
-    }
-    else if (button == 3) // 아래 버튼
-    {
-        currentIndex = (currentIndex + 1) % currentNode->subItemCount;
-    }
-    else if (button == 4) // 오른쪽 버튼 (하위 메뉴로 이동)
-    {
-        if (currentNode->subItemCount > 0)
-        {
-            currentNode = currentNode->subItems[currentIndex];
-            currentIndex = 0;
-        }
-    }
-    else if (button == 2) // 왼쪽 버튼 (상위 메뉴로 이동)
-    {
-        if (currentNode->parent != NULL)
-        {
-            currentNode = currentNode->parent;
-            currentIndex = 0;
-        }
-    }
-
-    display_menu(lcd_fd, currentNode, currentIndex);
-
-    pthread_mutex_unlock(&lock);
-}
-
-void *monitorThread(void *arg)
-{
-    while (1)
-    {
-        pthread_mutex_lock(&lock);
-        for (int i = 0; i < 4; i++)
-        {
-            if (buttonStates[i] == 1)
-            {
-                printf("모니터: 버튼 %d 눌림\n", i + 1);
-                buttonStates[i] = 0;
-            }
-        }
-        pthread_mutex_unlock(&lock);
-        usleep(100000);
     }
     return NULL;
 }
@@ -378,6 +319,7 @@ TreeNode *read_json(const char *filename)
     }
 
     TreeNode *root = parse_json(json);
+    print_tree(root, 10);
     cJSON_Delete(json);
 
     return root;
@@ -484,10 +426,40 @@ void lcd_scroll(int lcd_fd, const char *s, int line)
     }
 }
 
-void lcd_write_two_lines(int lcd_fd, const char *line1, const char *line2)
+void handle_button_event(int lcd_fd, int button)
 {
-    lcd_write(lcd_fd, line1, LINE1);
-    lcd_write(lcd_fd, line2, LINE2);
+    if (button == 1) // 위 버튼
+    {
+        currentIndex = (currentIndex - 1 + currentNode->subItemCount) % currentNode->subItemCount;
+    }
+    else if (button == 3) // 아래 버튼
+    {
+        currentIndex = (currentIndex + 1) % currentNode->subItemCount;
+    }
+    else if (button == 4) // 오른쪽 버튼 (하위 메뉴로 이동)
+    {
+        if (currentNode->subItemCount > 0)
+        {
+            currentNode = currentNode->subItems[currentIndex];
+            currentIndex = 0;
+        }
+    }
+    else if (button == 2) // 왼쪽 버튼 (상위 메뉴로 이동)
+    {
+        if (currentNode->parent != NULL)
+        {
+            currentNode = currentNode->parent;
+            currentIndex = 0;
+        }
+    }
+    lcd_clear(lcd_fd);
+    display_menu(lcd_fd, currentNode, currentIndex);
+}
+
+void lcd_clear(int lcd_fd)
+{
+    lcd_byte(lcd_fd, 0x01, LCD_CMD); // Clear display command
+    usleep(2000);                    // Wait for the command to complete
 }
 
 void display_menu(int lcd_fd, TreeNode *node, int index)
@@ -495,14 +467,32 @@ void display_menu(int lcd_fd, TreeNode *node, int index)
     if (node == NULL || node->subItemCount == 0)
         return;
 
-    int totalSiblings = node->subItemCount;
-    int nextIndex = (index + 1) % totalSiblings;
+    TreeNode *current = node->subItems[index];
+    TreeNode *next = current->sibling ? current->sibling : node->subItems[0];
 
     // 첫 번째 줄에 현재 항목 표시
-    lcd_write(lcd_fd, node->subItems[index]->name, LINE1);
+    lcd_write(lcd_fd, current->name, LINE1);
 
     // 두 번째 줄에 다음 항목 표시
-    lcd_write(lcd_fd, node->subItems[nextIndex]->name, LINE2);
+    lcd_write(lcd_fd, next->name, LINE2);
+}
+
+void *display_thread(void *arg)
+{
+    while (1)
+    {
+        pthread_mutex_lock(&lock);
+        while (buttonEvent == 0)
+        {
+            pthread_cond_wait(&cond, &lock);
+        }
+
+        handle_button_event(lcd_fd, buttonEvent);
+        buttonEvent = 0;
+
+        pthread_mutex_unlock(&lock);
+    }
+    return NULL;
 }
 
 void *socket_thread(void *arg)
