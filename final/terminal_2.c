@@ -8,7 +8,7 @@
 #include <cjson/cJSON.h>
 #include <sys/ioctl.h>
 #include <linux/i2c-dev.h>
-#include "../protocol.h"
+#include "protocol.h"
 
 #define SERVER_IP "127.0.0.1"
 #define SERVER_PORT 8080
