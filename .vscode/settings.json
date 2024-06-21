@@ -3,5 +3,6 @@
         "softpwm.h": "c"
     },
     "github.copilot.chat.localeOverride": "ko",
-    "github.copilot.chat.scopeSelection": true
+    "github.copilot.chat.scopeSelection": true,
+    "cmake.sourceDirectory": "/workspaces/sys-prog-4demo/terminal"
 }

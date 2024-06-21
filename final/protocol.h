@@ -1,25 +1,41 @@
-#ifndef PROTOCOL_H
-#define PROTOCOL_H
+#ifndef MESSAGE_PROTOCOL_H
+#define MESSAGE_PROTOCOL_H
 
 #include <stdint.h>
 
-// 메시지 타입 정의
-#define MESSAGE_TYPE_TEXT 0x01
-#define MESSAGE_TYPE_FILE_REQUEST 0x02
-#define MESSAGE_TYPE_FILE_RESPONSE 0x03
+// 사용자 유형 (2비트)
+#define U_NORMAL 0x00
+#define U_ADMIN  0x01
 
-// 최대 메시지 크기 정의
-#define MAX_MESSAGE_LENGTH 1024
+// 메시지 타입 (6비트)
+#define M_SAVE           0x01
+#define M_UPDATE         0x02
+#define M_DELETE         0x03
+#define M_REQUEST_USER   0x04
+#define M_REQUEST_ALL    0x05
+#define M_ACK            0x06
+#define M_ERROR          0x07
+#define M_DATA_RESPONSE  0x08
 
-// 메시지 구조체 정의
+// 메시지 구조체
 typedef struct {
-    uint8_t type;          // 메시지 타입 (1바이트)
-    uint16_t length;       // 메시지 길이 (2바이트)
-    uint8_t body[MAX_MESSAGE_LENGTH];  // 메시지 본문 (가변 길이)
+    uint8_t messageTypeUserType; // 메시지 타입 (상위 6비트) 및 사용자 유형 (하위 2비트)
+    uint16_t dataLength;         // 데이터 길이 (2바이트)
+    uint8_t *data;               // 데이터 내용 (가변 길이)
 } Message;
 
-// 함수 프로토타입
-void create_message(Message *msg, uint8_t type, const uint8_t *body, uint16_t length);
-void print_message(const Message *msg);
+// 메시지 생성 함수 선언
+Message *createMessage(uint8_t messageType, uint8_t userType, uint16_t dataLength, uint8_t *data);
+void freeMessage(Message *message);
 
-#endif // PROTOCOL_H
+// 메시지 처리 함수 선언
+void handleSaveRequest(Message *message);
+void handleUpdateRequest(Message *message);
+void handleDeleteRequest(Message *message);
+void handleRequestUser(Message *message);
+void handleRequestAll(Message *message);
+void handleAck(Message *message);
+void handleError(Message *message);
+void handleDataResponse(Message *message);
+
+#endif // MESSAGE_PROTOCOL_H

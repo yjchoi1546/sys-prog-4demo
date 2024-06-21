@@ -1,4 +1,17 @@
-#include "server.h"
+#include "server_1.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <arpa/inet.h>
+#include <time.h>
+#include "protocol.h"
+
+#define PORT 8080
+#define BUFFER_SIZE 1024
+#define MAX_USERS 100
+#define MAX_ADMINS 10
 
 // 전역 변수 선언
 struct user users[MAX_USERS]; // 사용자 데이터 저장 배열
@@ -6,6 +19,22 @@ struct admin admins[MAX_ADMINS]; // 관리자 데이터 저장 배열
 int user_count = 0;           // 현재 사용자 수
 int admin_count = 0;          // 현재 관리자 수
 pthread_mutex_t lock;         // 뮤텍스 락
+
+// 사용자 데이터 구조체
+struct interval {
+    time_t start;
+    time_t end;
+};
+
+struct user {
+    char id[14];
+    int mileage;
+    struct interval intervals[10];
+};
+
+struct admin {
+    char id[14];
+};
 
 // 사용자 데이터를 저장하는 함수
 void save_user_data(char *user_id, time_t start, time_t end) {
@@ -41,11 +70,11 @@ int calculate_mileage(time_t start, time_t end) {
 }
 
 // 사용자 데이터를 터미널로 전송하는 함수
-void send_user_data_to_terminal(int client_socket, char *user_id) {
+void send_user_data_to_terminal(int sockfd, struct sockaddr_in *clientAddr, socklen_t addrLen, char *user_id) {
     pthread_mutex_lock(&lock); // 데이터 접근 시 뮤텍스 잠금
     for (int i = 0; i < user_count; ++i) {
         if (strcmp(users[i].id, user_id) == 0) {
-            write(client_socket, &users[i], sizeof(struct user)); // 사용자 데이터 전송
+            sendto(sockfd, &users[i], sizeof(struct user), 0, (struct sockaddr *)clientAddr, addrLen); // 사용자 데이터 전송
             pthread_mutex_unlock(&lock); // 뮤텍스 잠금 해제
             return;
         }
@@ -54,11 +83,11 @@ void send_user_data_to_terminal(int client_socket, char *user_id) {
 }
 
 // 관리자 요청을 처리하는 함수
-void handle_admin_request(int client_socket, char *admin_id, int request_type) {
+void handle_admin_request(int sockfd, struct sockaddr_in *clientAddr, socklen_t addrLen, char *admin_id, int request_type) {
     pthread_mutex_lock(&lock); // 데이터 접근 시 뮤텍스 잠금
     if (request_type == 1) { // 유저 리스트 조회
         for (int i = 0; i < user_count; ++i) {
-            write(client_socket, &users[i], sizeof(struct user)); // 모든 사용자 데이터 전송
+            sendto(sockfd, &users[i], sizeof(struct user), 0, (struct sockaddr *)clientAddr, addrLen); // 모든 사용자 데이터 전송
         }
     } else if (request_type == 2) { // 신규 관리자 계정 추가
         if (admin_count < MAX_ADMINS) {
@@ -80,21 +109,16 @@ void handle_admin_request(int client_socket, char *admin_id, int request_type) {
 
 // 클라이언트 요청을 처리하는 함수
 void *client_handler(void *arg) {
-    int client_socket = *(int *)arg;
-    free(arg);
+    uint8_t *buffer = (uint8_t *)arg;
+    struct sockaddr_in clientAddr;
+    socklen_t addrLen;
+    memcpy(&clientAddr, buffer + BUFFER_SIZE, sizeof(struct sockaddr_in));
+    memcpy(&addrLen, buffer + BUFFER_SIZE + sizeof(struct sockaddr_in), sizeof(socklen_t));
+    
+    Message msg;
+    memcpy(&msg, buffer, sizeof(Message));
 
-    uint8_t buffer[BUFFER_SIZE]; // 버퍼 생성
-    int bytes_received = read(client_socket, buffer, BUFFER_SIZE);
-    if (bytes_received < 0) {
-        perror("recv failed");
-        close(client_socket);
-        return NULL;
-    }
-
-    Message msg; // 메시지 구조체 생성
-    memcpy(&msg, buffer, bytes_received); // 버퍼 데이터를 메시지 구조체로 복사
-
-    if (msg.type == MESSAGE_TYPE_TEXT) { // 사용자 데이터 저장 메시지
+    if (msg.type == M_TEXT) { // 사용자 데이터 저장 메시지
         char user_id[14];
         time_t start, end;
         memcpy(user_id, msg.body, 14); // 사용자 ID 복사
@@ -102,27 +126,28 @@ void *client_handler(void *arg) {
         memcpy(&end, msg.body + 14 + sizeof(time_t), sizeof(time_t)); // 종료 시간 복사
 
         save_user_data(user_id, start, end); // 사용자 데이터 저장
-    } else if (msg.type == MESSAGE_TYPE_FILE_REQUEST) { // 사용자 데이터 요청 메시지
+    } else if (msg.type == M_FILE_REQUEST) { // 사용자 데이터 요청 메시지
         char user_id[14];
         memcpy(user_id, msg.body, 14); // 사용자 ID 복사
-        send_user_data_to_terminal(client_socket, user_id); // 사용자 데이터 전송
-    } else if (msg.type == MESSAGE_TYPE_FILE_RESPONSE) { // 관리자 요청 메시지
+        send_user_data_to_terminal(sockfd, &clientAddr, addrLen, user_id); // 사용자 데이터 전송
+    } else if (msg.type == M_FILE_RESPONSE) { // 관리자 요청 메시지
         char admin_id[14];
         int request_type;
         memcpy(admin_id, msg.body, 14); // 관리자 ID 복사
         memcpy(&request_type, msg.body + 14, sizeof(int)); // 요청 타입 복사
-        handle_admin_request(client_socket, admin_id, request_type); // 관리자 요청 처리
+        handle_admin_request(sockfd, &clientAddr, addrLen, admin_id, request_type); // 관리자 요청 처리
     }
 
-    close(client_socket); // 클라이언트 소켓 닫기
+    free(buffer);
     return NULL;
 }
 
 // 서버 메인 함수
 int main() {
-    int server_socket, *new_socket;
-    struct sockaddr_in server_addr, client_addr;
-    socklen_t addr_size = sizeof(struct sockaddr_in);
+    int sockfd;
+    struct sockaddr_in serverAddr, clientAddr;
+    socklen_t addrLen = sizeof(clientAddr);
+    uint8_t buffer[BUFFER_SIZE];
     pthread_t tid;
 
     // 뮤텍스 초기화
@@ -131,48 +156,44 @@ int main() {
         return 1;
     }
 
-    // 소켓 생성
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket < 0) {
+    // 서버 소켓 생성
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("Socket creation failed");
         return 1;
     }
 
     // 서버 주소 설정
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(PORT);
+    memset(&serverAddr, 0, sizeof(serverAddr));
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_port = htons(PORT);
 
     // 소켓 바인딩
-    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+    if (bind(sockfd, (const struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
         perror("Bind failed");
-        close(server_socket);
-        return 1;
-    }
-
-    // 클라이언트 연결 대기
-    if (listen(server_socket, 3) < 0) {
-        perror("Listen failed");
-        close(server_socket);
+        close(sockfd);
         return 1;
     }
 
     printf("Server listening on port %d\n", PORT);
 
     while (1) {
-        // 클라이언트 연결 수락
-        new_socket = malloc(sizeof(int));
-        *new_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addr_size);
-        if (*new_socket < 0) {
-            perror("Accept failed");
-            free(new_socket);
+        int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&clientAddr, &addrLen);
+        if (n < 0) {
+            perror("Receive failed");
             continue;
         }
 
+        // 클라이언트 요청을 처리하기 위한 버퍼 생성 및 초기화
+        uint8_t *arg_buffer = malloc(BUFFER_SIZE + sizeof(struct sockaddr_in) + sizeof(socklen_t));
+        memcpy(arg_buffer, buffer, n);
+        memcpy(arg_buffer + BUFFER_SIZE, &clientAddr, sizeof(struct sockaddr_in));
+        memcpy(arg_buffer + BUFFER_SIZE + sizeof(struct sockaddr_in), &addrLen, sizeof(socklen_t));
+
         // 새로운 쓰레드 생성
-        if (pthread_create(&tid, NULL, client_handler, (void *)new_socket) != 0) {
+        if (pthread_create(&tid, NULL, client_handler, (void *)arg_buffer) != 0) {
             perror("Thread creation failed");
-            free(new_socket);
+            free(arg_buffer);
         }
 
         // 쓰레드 분리
@@ -180,7 +201,7 @@ int main() {
     }
 
     // 자원 정리
-    close(server_socket);
+    close(sockfd);
     pthread_mutex_destroy(&lock);
     return 0;
 }

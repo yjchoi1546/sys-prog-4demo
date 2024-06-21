@@ -1,0 +1,58 @@
+Performing C SOURCE FILE Test CMAKE_HAVE_LIBC_PTHREAD failed with the following output:
+Change Dir: /workspaces/sys-prog-4demo/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/make cmTC_deeff/fast && /usr/bin/make -f CMakeFiles/cmTC_deeff.dir/build.make CMakeFiles/cmTC_deeff.dir/build
+make[1]: Entering directory '/workspaces/sys-prog-4demo/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_deeff.dir/src.c.o
+/usr/bin/gcc   -DCMAKE_HAVE_LIBC_PTHREAD   -std=gnu99 -o CMakeFiles/cmTC_deeff.dir/src.c.o   -c /workspaces/sys-prog-4demo/build/CMakeFiles/CMakeTmp/src.c
+Linking C executable cmTC_deeff
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_deeff.dir/link.txt --verbose=1
+/usr/bin/gcc  -DCMAKE_HAVE_LIBC_PTHREAD    CMakeFiles/cmTC_deeff.dir/src.c.o  -o cmTC_deeff 
+/usr/bin/ld: CMakeFiles/cmTC_deeff.dir/src.c.o: in function `main':
+src.c:(.text+0x46): undefined reference to `pthread_create'
+/usr/bin/ld: src.c:(.text+0x52): undefined reference to `pthread_detach'
+/usr/bin/ld: src.c:(.text+0x63): undefined reference to `pthread_join'
+collect2: error: ld returned 1 exit status
+make[1]: *** [CMakeFiles/cmTC_deeff.dir/build.make:87: cmTC_deeff] Error 1
+make[1]: Leaving directory '/workspaces/sys-prog-4demo/build/CMakeFiles/CMakeTmp'
+make: *** [Makefile:121: cmTC_deeff/fast] Error 2
+
+
+Source file was:
+#include <pthread.h>
+
+void* test_func(void* data)
+{
+  return data;
+}
+
+int main(void)
+{
+  pthread_t thread;
+  pthread_create(&thread, NULL, test_func, NULL);
+  pthread_detach(thread);
+  pthread_join(thread, NULL);
+  pthread_atfork(NULL, NULL, NULL);
+  pthread_exit(NULL);
+
+  return 0;
+}
+
+Determining if the function pthread_create exists in the pthreads failed with the following output:
+Change Dir: /workspaces/sys-prog-4demo/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/make cmTC_1babe/fast && /usr/bin/make -f CMakeFiles/cmTC_1babe.dir/build.make CMakeFiles/cmTC_1babe.dir/build
+make[1]: Entering directory '/workspaces/sys-prog-4demo/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_1babe.dir/CheckFunctionExists.c.o
+/usr/bin/gcc   -DCHECK_FUNCTION_EXISTS=pthread_create   -std=gnu99 -o CMakeFiles/cmTC_1babe.dir/CheckFunctionExists.c.o   -c /usr/share/cmake-3.16/Modules/CheckFunctionExists.c
+Linking C executable cmTC_1babe
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_1babe.dir/link.txt --verbose=1
+/usr/bin/gcc  -DCHECK_FUNCTION_EXISTS=pthread_create    CMakeFiles/cmTC_1babe.dir/CheckFunctionExists.c.o  -o cmTC_1babe  -lpthreads 
+/usr/bin/ld: cannot find -lpthreads
+collect2: error: ld returned 1 exit status
+make[1]: *** [CMakeFiles/cmTC_1babe.dir/build.make:87: cmTC_1babe] Error 1
+make[1]: Leaving directory '/workspaces/sys-prog-4demo/build/CMakeFiles/CMakeTmp'
+make: *** [Makefile:121: cmTC_1babe/fast] Error 2
+
+
+
