@@ -37,7 +37,7 @@ struct admin {
 void save_user_data(char *user_id, time_t start, time_t end);
 int calculate_mileage(time_t start, time_t end);
 void *client_handler(void *arg);
-void send_user_data_to_terminal(int client_socket, char *user_id);
-void handle_admin_request(int client_socket, char *admin_id, int request_type);
+void send_user_data_to_terminal(int sockfd, struct sockaddr_in *clientAddr, socklen_t addrLen, char *user_id);
+void handle_admin_request(int sockfd, struct sockaddr_in *clientAddr, socklen_t addrLen, char *admin_id, int request_type);
 
 #endif // SERVER_H
