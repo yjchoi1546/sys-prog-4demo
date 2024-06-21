@@ -19,22 +19,7 @@ struct admin admins[MAX_ADMINS]; // 관리자 데이터 저장 배열
 int user_count = 0;           // 현재 사용자 수
 int admin_count = 0;          // 현재 관리자 수
 pthread_mutex_t lock;         // 뮤텍스 락
-
-// 사용자 데이터 구조체
-struct interval {
-    time_t start;
-    time_t end;
-};
-
-struct user {
-    char id[14];
-    int mileage;
-    struct interval intervals[10];
-};
-
-struct admin {
-    char id[14];
-};
+int sockfd;                   // 서버 소켓 파일 디스크립터
 
 // 사용자 데이터를 저장하는 함수
 void save_user_data(char *user_id, time_t start, time_t end) {
@@ -144,7 +129,6 @@ void *client_handler(void *arg) {
 
 // 서버 메인 함수
 int main() {
-    int sockfd;
     struct sockaddr_in serverAddr, clientAddr;
     socklen_t addrLen = sizeof(clientAddr);
     uint8_t buffer[BUFFER_SIZE];
@@ -185,10 +169,10 @@ int main() {
         }
 
         // 클라이언트 요청을 처리하기 위한 버퍼 생성 및 초기화
-        uint8_t *arg_buffer = malloc(BUFFER_SIZE + sizeof(struct sockaddr_in) + sizeof(socklen_t));
+        uint8_t *arg_buffer = malloc(n + sizeof(struct sockaddr_in) + sizeof(socklen_t));
         memcpy(arg_buffer, buffer, n);
-        memcpy(arg_buffer + BUFFER_SIZE, &clientAddr, sizeof(struct sockaddr_in));
-        memcpy(arg_buffer + BUFFER_SIZE + sizeof(struct sockaddr_in), &addrLen, sizeof(socklen_t));
+        memcpy(arg_buffer + n, &clientAddr, sizeof(struct sockaddr_in));
+        memcpy(arg_buffer + n + sizeof(struct sockaddr_in), &addrLen, sizeof(socklen_t));
 
         // 새로운 쓰레드 생성
         if (pthread_create(&tid, NULL, client_handler, (void *)arg_buffer) != 0) {
