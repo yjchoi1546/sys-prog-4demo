@@ -8,6 +8,7 @@
 #include <cjson/cJSON.h>
 #include <sys/ioctl.h>
 #include <linux/i2c-dev.h>
+#include "protocol.h"
 
 #define SERVER_IP "127.0.0.1"
 #define SERVER_PORT 8080
@@ -68,6 +69,10 @@ TreeNode *read_json(const char *filename);
 void *display_thread(void *arg);
 void lcd_clear(int lcd_fd);
 
+// GPIO 설정 함수 모듈화
+void setupGPIO(int pin, const char *direction);
+void cleanupGPIO(int pin);
+
 int main(int argc, char *argv[])
 {
     lcd_fd = lcd_init();
@@ -81,8 +86,7 @@ int main(int argc, char *argv[])
 
     for (int i = 0; i < BUTTON_COUNT; i++)
     {
-        exportGPIO(buttonPins[i]);
-        setGPIODirection(buttonPins[i], "high");
+        setupGPIO(buttonPins[i], "high");
     }
 
     pthread_t displayThread;
@@ -115,9 +119,25 @@ int main(int argc, char *argv[])
 
     close(lcd_fd);
 
+    for (int i = 0; i < BUTTON_COUNT; i++)
+    {
+        cleanupGPIO(buttonPins[i]);
+    }
+
     free_tree(root);
 
     return 0;
+}
+
+void setupGPIO(int pin, const char *direction)
+{
+    exportGPIO(pin);
+    setGPIODirection(pin, direction);
+}
+
+void cleanupGPIO(int pin)
+{
+    unexportGPIO(pin);
 }
 
 void exportGPIO(int pin)
@@ -245,8 +265,11 @@ void add_sub_item(TreeNode *parent, TreeNode *child)
     {
         parent->subItems[parent->subItemCount - 1]->sibling = child;
     }
+    else
+    {
+        parent->subItems = malloc(sizeof(TreeNode *));
+    }
 
-    parent->subItems = realloc(parent->subItems, sizeof(TreeNode *) * (parent->subItemCount + 1));
     parent->subItems[parent->subItemCount] = child;
     parent->subItemCount++;
     child->parent = parent;
@@ -266,6 +289,10 @@ TreeNode *parse_json(cJSON *json)
             TreeNode *child = parse_json(subItem);
             add_sub_item(node, child);
         }
+    }
+    else
+    {
+        node->subItemCount = 0;
     }
 
     return node;
@@ -442,7 +469,10 @@ void handle_button_event(int lcd_fd, int button)
         {
             currentNode = currentNode->subItems[currentIndex];
             currentIndex = 0;
+            lcd_clear(lcd_fd);
+            display_menu(lcd_fd, currentNode, currentIndex);
         }
+        return; // 자식 노드가 없을 때는 아무 변화도 없게 함
     }
     else if (button == 2) // 왼쪽 버튼 (상위 메뉴로 이동)
     {
@@ -450,16 +480,14 @@ void handle_button_event(int lcd_fd, int button)
         {
             currentNode = currentNode->parent;
             currentIndex = 0;
+            lcd_clear(lcd_fd);
+            display_menu(lcd_fd, currentNode, currentIndex);
         }
     }
-    lcd_clear(lcd_fd);
-    display_menu(lcd_fd, currentNode, currentIndex);
-}
-
-void lcd_clear(int lcd_fd)
-{
-    lcd_byte(lcd_fd, 0x01, LCD_CMD); // Clear display command
-    usleep(2000);                    // Wait for the command to complete
+    else
+    {
+        return; // 어떤 경우도 해당되지 않으면 아무 변화도 없게 함
+    }
 }
 
 void display_menu(int lcd_fd, TreeNode *node, int index)
@@ -468,13 +496,39 @@ void display_menu(int lcd_fd, TreeNode *node, int index)
         return;
 
     TreeNode *current = node->subItems[index];
-    TreeNode *next = current->sibling ? current->sibling : node->subItems[0];
+    TreeNode *next = current->sibling ? current->sibling : NULL;
+
+    char display_line1[17];
+    char display_line2[17] = ""; // 두 번째 줄 초기화
+
+    snprintf(display_line1, sizeof(display_line1), "> %s", current->name);
+
+    if (next)
+    {
+        snprintf(display_line2, sizeof(display_line2), "  %s", next->name);
+    }
 
     // 첫 번째 줄에 현재 항목 표시
-    lcd_write(lcd_fd, current->name, LINE1);
+    lcd_write(lcd_fd, display_line1, LINE1);
 
     // 두 번째 줄에 다음 항목 표시
-    lcd_write(lcd_fd, next->name, LINE2);
+    if (strlen(display_line2) > 0)
+    {
+        lcd_write(lcd_fd, display_line2, LINE2);
+    }
+    else
+    {
+        lcd_clear_line(lcd_fd, LINE2); // 두 번째 줄 지우기
+    }
+}
+
+void lcd_clear_line(int lcd_fd, int line)
+{
+    lcd_byte(lcd_fd, line, LCD_CMD);
+    for (int i = 0; i < 16; i++)
+    {
+        lcd_byte(lcd_fd, ' ', LCD_CHR);
+    }
 }
 
 void *display_thread(void *arg)
